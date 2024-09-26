@@ -1,0 +1,16 @@
+[package]
+name = "adb"
+
+[lib]
+name = "alvr_adb"
+path = "src/lib.rs"
+
+[[bin]]
+name = "alvr_adb"
+path = "src/bin.rs"
+
+[dependencies]
+mozdevice = "0.5.3"
+anyhow = "1.0"
+tracing = "0.1"
+tracing-subscriber = "0.3"
