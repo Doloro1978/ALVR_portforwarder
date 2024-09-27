@@ -1,3 +1,4 @@
+use std::vec;
 use std::{borrow::Borrow, default, process::Command};
 
 extern crate anyhow;
@@ -15,61 +16,60 @@ pub struct AlvrDevice {
     serial: String,
     ports: Vec<u16>,
 }
-
-impl AlvrAdb {
-    pub fn new() -> Self {
+#[warn(clippy::derivable_impls)]
+impl Default for AlvrAdb {
+    fn default() -> Self {
         AlvrAdb { devices: vec![] }
     }
-    pub fn forward_ports_to_all(&mut self, local_port: u16, remote_port: u16) -> Result<(), Error> {
+}
+
+impl AlvrAdb {
+    pub fn forward_ports(&mut self, port: u16) -> Result<(), Error> {
         let devices_host = Host::default();
         let connected_devices: Vec<DeviceInfo> = devices_host.devices()?;
+        let mut devices_to_remove: Vec<String> = vec![];
+        // if device isnt connected but has been connected before, assume disconected and remove from vec
+        self.devices.iter().for_each(|r| {
+            if let Some(abc) = connected_devices.iter().find(|x| x.serial == r.serial) {
+            } else {
+                devices_to_remove.push(r.serial.clone());
+            }
+        });
+        devices_to_remove.iter().for_each(|r| {
+            self.devices
+                .remove(self.devices.iter().position(|rx| rx.serial == *r).unwrap());
+        });
+
         for device in connected_devices {
             let host: mozdevice::Host = Host::default();
             let devices: Device =
                 host.device_or_default(Some(&device.serial), mozdevice::AndroidStorageInput::Auto)?;
-            let mut device_exists = false;
-            let mut device_already_forwarded = false;
-            for i in &self.devices {
-                if device.serial == i.serial {
-                    device_exists = true;
-                    break;
+            // let mut device_exists = false;
+            // let mut device_already_forwarded = false;
+            if let Some(device_entry) = self.devices.iter().find(|r| r.serial.eq(&device.serial)) {
+                if device_entry.ports.contains(&port) {
+                    continue;
                 }
-            }
-            let mut indices_to_remove = vec![];
-            for (i, x) in self.devices.iter().enumerate() {
-                if !x.serial.contains(&device.serial) {
-                    indices_to_remove.push(i);
-                }
-            }
-            for index in indices_to_remove.iter().rev() {
-                self.devices.remove(*index);
-            }
-            if !device_exists {
+            } else {
                 self.devices.push(AlvrDevice {
                     serial: device.serial.clone(),
                     ports: vec![],
                 });
-            } else {
-                for devicee in &self.devices {
-                    if devicee.serial == device.serial && devicee.ports.contains(&local_port) {
-                        device_already_forwarded = true;
-                        // so it doesnt spam logs
-                        break;
-                    }
-                }
-                break;
             }
             info!("Attempting to forward {}", device.serial);
-            match devices.forward_port(local_port, remote_port) {
+            match devices.forward_port(port, port) {
                 Ok(_) => {
                     info!(
                         "Port forwarding successful for {}, port {}",
-                        device.serial, local_port
+                        device.serial, port
                     );
-                    for device in &mut self.devices {
-                        if !device.ports.contains(&local_port) {
-                            device.ports.push(local_port);
-                        }
+                    // add port to entry if it isnt already in there
+                    if let Some(wawa) = self
+                        .devices
+                        .iter_mut()
+                        .find(|r| !r.ports.contains(&port) || r.serial.eq(&device.serial))
+                    {
+                        wawa.ports.push(port);
                     }
                 }
                 Err(e) => {
